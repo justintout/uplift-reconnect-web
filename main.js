@@ -64,7 +64,7 @@ async function onDiscoverButtonClick() {
     try {
         const device = await navigator.bluetooth.requestDevice({
             filters: [
-                {services: [service]}
+                {services: [serviceUUID]}
             ]
         });
         const server = await device.gatt.connect();

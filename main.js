@@ -30,20 +30,17 @@ class Desk {
 }
 
 async function connect() {
-    return new Promise((resolve, reject) => {
-        try {
-            const device = await navigator.bluetooth.requestDevice({
-                filters: [
-                    {services: [service]}
-                ]
-            });
-            desk = new Desk(device);
-            await desk.connect();
-            resolve();
-        } catch (e) {
-            reject(e);
-        }
-    });
+    try {
+        const device = await navigator.bluetooth.requestDevice({
+            filters: [
+                {services: [service]}
+            ]
+        });
+        desk = new Desk(device);
+        return await desk.connect();
+    } catch (e) {
+        console.error(`failed to connect to device: ${e}`);
+    }
 } 
 
 async function disconnect() {
@@ -55,7 +52,10 @@ async function disconnect() {
 
 (function() {
     document.querySelector('#btnServiceDiscovery').addEventListener('click', onDiscoverButtonClick);
-    disconnect.querySelector('#btnConnect').addEventListener('click', onConn)
+    document.querySelector('#btnConnect').addEventListener('click', onConnectClick);
+    document.querySelector('#btnDisconnect').addEventListener('click', onConnectClick);
+    document.querySelector('#btnUp').addEventListener('mousedown', onUpMouseDown);
+    document.querySelector('#btnDown').addEventListener('mousedown', onDownMouseDown);
 })();
 
 async function onDiscoverButtonClick() {
@@ -97,5 +97,29 @@ async function onConnectClick() {
 }
 
 async function onDisconnectClick() {
+    await discnonect();
+}
 
+async function onUpMouseDown() {
+    const button = document.querySelector('#btnUp');
+    const interval = setInterval(() => {
+        desk.up();
+    }, directionPacketDelay);
+    const onMouseUp = function() {
+        clearInterval(interval);
+        button.removeEventListener(onMouseUp);
+    };
+    button.addEventListener('mouseup', onMouseUp);
+}
+
+async function onDownMouseDown() {
+    const button = document.querySelector('#btnDown');
+    const interval = setInterval(() => {
+        desk.down();
+    }, directionPacketDelay);
+    const onMouseUp = function() {
+        clearInterval(interval);
+        button.removeEventListener(onMouseUp);
+    }
+    button.addEventListener('mouseup', onMouseUp);
 }

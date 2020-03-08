@@ -1,4 +1,4 @@
-const serviceUUID = '0000ff12-0000-1000-8000-008005f9b34fb';
+const serviceUUID = '0000ff12-0000-1000-8000-00805f9b34fb';
 const dataInCharacteristicUUID = '0000ff01-0000-1000-8000-008005f9b34fb';
 const dataOutCharacteristicUUID = '0000ff02-0000-1000-8000-008005f9b34fb';
 

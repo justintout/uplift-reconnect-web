@@ -29,6 +29,35 @@ class Desk {
     }
 }
 
+async function connect() {
+    return new Promise((resolve, reject) => {
+        try {
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [
+                    {services: [service]}
+                ]
+            });
+            desk = new Desk(device);
+            await desk.connect();
+            resolve();
+        } catch (e) {
+            reject(e);
+        }
+    });
+} 
+
+async function disconnect() {
+    if (desk) {
+        desk.disconnect(); 
+    }
+    desk = undefined;
+}
+
+(function() {
+    document.querySelector('#btnServiceDiscovery').addEventListener('click', onDiscoverButtonClick);
+    disconnect.querySelector('#btnConnect').addEventListener('click', onConn)
+})();
+
 async function onDiscoverButtonClick() {
     alert('Check the console for info');
 
@@ -51,22 +80,22 @@ async function onDiscoverButtonClick() {
     }
 }
 
-async function connect() {
-    const device = await navigator.bluetooth.requestDevice({
-        filters: [
-            {services: [service]}
-        ]
-    });
-    server = await connect();
-} 
-
-async function disconnect() {
-    if (desk) {
-        desk.disconnect(); 
+async function onConnectClick() {
+    try {
+        document.querySelector('#btnConnect').disabled = true;
+        await connect();
+        for (const id of ['#btnDisconnect', '#btnUp', '#btnDown']) {
+            document.querySelector(id).disabled = false;
+        }
+    } catch (e) {
+        document.querySelector('#btnConnect').disabled = false;
+        for (const id of ['#btnDisconnect', '#btnUp', '#btnDown']) {
+            document.querySelector(id).disabled = true;
+        }
+        console.error(`couldn't connect to device: ${e}`);
     }
-    desk = undefined;
 }
 
-(function() {
-    document.querySelector('#btnServiceDiscovery').onClick(onDiscoverButtonClick);
-})();
+async function onDisconnectClick() {
+
+}

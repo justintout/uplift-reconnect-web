@@ -12,7 +12,7 @@ const heightNotificationDifference = 20;
 let standingHeightValues = [200, 212];
 let sittingHeightValues = [41, 60]; 
 let lastHeightValues;
-let automaticallyReconnnect = false;
+let automaticallyReconnect = false;
 let logNotifications = false;
 let logConnectionEvents = true;
 let logHeightEvents = false;
@@ -66,7 +66,7 @@ class OptionsEvent extends CustomEvent {
      * @param {[number, number]} height New sitting height
      */
     static sittingHeightChanged(height) {
-        return new OptionsEvent(standingHeightValues, height, automaticallyReconnnect);
+        return new OptionsEvent(standingHeightValues, height, automaticallyReconnect);
     }
 
     /**
@@ -290,6 +290,10 @@ function toHexOrUTF8(d) {
 }
 
 (function() {
+    if (!navigator.bluetooth) {
+        document.querySelector('#browserWarningContainer').style.display = 'block';
+        throw new Error(`navigator.bluetooth is undefined. can't continue`);
+    }
     const debug = [
         {elem: document.querySelector('#chxLogConn'), listener: onLogConnectionEventsChanged, enabled: logConnectionEvents},
         {elem: document.querySelector('#chxLogHeight'), listener: onLogHeightEventsChanged, enabled: logHeightEvents},
@@ -335,7 +339,7 @@ function toHexOrUTF8(d) {
     });
 
     // TODO: pull from localstorage to dispatch
-    window.dispatchEvent(new OptionsEvent(standingHeightValues, sittingHeightValues, automaticallyReconnnect));
+    window.dispatchEvent(new OptionsEvent(standingHeightValues, sittingHeightValues, automaticallyReconnect));
 })();
 
 async function onDiscoverButtonClick() {
@@ -450,6 +454,7 @@ function onSetStandClick() {
         return;
     }
     standingHeightValues = lastHeightValues;
+    window.dispatchEvent(OptionsEvent.standingHeightChanged(standingHeightValues));
 }
 
 function onSetSitClick() {
@@ -458,4 +463,5 @@ function onSetSitClick() {
         return;
     }
     sittingHeightValues = lastHeightValues;
+    window.dispatchEvent(OptionsEvent.sittingHeightChanged(sittingHeightValues));
 }

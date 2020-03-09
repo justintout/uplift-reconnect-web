@@ -9,6 +9,24 @@
 </head>
 <body>
     <h1>Uplift Desk reConnect</h1>
+    <noscript>
+        <h2>Sorry!</h2>
+        <p>
+            This webapp needs JavaScript to make use of the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API">Web Bluetooth API</a> 
+            to communicate with the Uplift Connect BLE module. Nothing here is going to work without it.
+        </p>
+    </noscript>
+    <div id="browserWarningContainer" style="display:none">
+        <h2>Sorry!</h2>
+        <p>
+            This webapp needs access to the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API">Web Bluetooth API</a>
+            to communicate with the Uplift Connect BLE module. It looks like the <code>navigator.bluetooth</code> object doesn't exist in your browser.
+            I recommend running this webapp in Chrome or Chrome for Android, since that's what I test with.
+        </p>
+        <p>
+            You can find a full compatibility list <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API#Browser_compatibility">here</a>.
+        </p>
+    </div>
     <div id="debugContainer">
         <h2>Debug</h2>
         <button id="btnServiceDiscovery">Discover</button>

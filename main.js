@@ -3,13 +3,14 @@ const dataInCharacteristicUUID = '0000ff01-0000-1000-8000-00805f9b34fb';
 const dataOutCharacteristicUUID = '0000ff02-0000-1000-8000-00805f9b34fb';
 
 const directionPacketDelay = 300; //ms
+const deskQueryPacket = new Uint8Array([0xf1, 0xf1, 0x07, 0x00, 0x07, 0x7e]); // TODO: is this right? the app sends this at the beginning of connection so maybe?
 const deskUpPacket = new Uint8Array([0xf1, 0xf1, 0x01, 0x00, 0x01, 0x7e]);
 const deskDownPacket = new Uint8Array([0xf1, 0xf1, 0x02, 0x00, 0x02, 0x7e]);
 const heightNotificationDifference = 20; 
 
 // TODO: how to get height out of the notifications?
 let standingHeightValues = [200, 212];
-let sittingHeightValues = [40, 52]; 
+let sittingHeightValues = [41, 60]; 
 let lastHeightValues;
 let automaticallyReconnnect = false;
 
@@ -99,6 +100,12 @@ class Desk {
     }
 
     async startNotifications() {
+        try {
+            await this.queryInitialHeight();
+        } catch (e) {
+            console.error(`failed querying initial height`);
+        }
+        // once we get our initial notifications (or not lol) we can listen for the height values 
         this.dataOutCharacteristic.addEventListener('characteristicvaluechanged', this.onNotification);
         await this.dataOutCharacteristic.startNotifications();
     }
@@ -106,6 +113,33 @@ class Desk {
     async stopNotifications() {
         this.dataOutCharacteristic.removeEventListener('characteristicvaluechanged', this.onNotification);
         await this.dataOutCharacteristic.stopNotifications();
+    }
+
+    /**
+     * TODO: better query here? 
+     * @async
+     */
+    queryInitialHeight() {
+        return new Promise((resolve, reject) => {
+            // we'll time this out just incase 
+            setTimeout(() => reject('never received our query values'), 5000);
+            const queryListener = function(event) {
+                // TODO: how does this actually work?
+                //       some kinda handshake seems to happen before this. don't get 
+                //       notifs with just this packet
+                // we'll get 3 notifications back, looking for the second (doesnt lead with f2 and is longer than 1)
+                // then we can grab current height from 17 and 19
+                const notif = toArray(event.target.value);
+                console.info(`received initial notification: ${toHexString(event.target.value)}`);
+                if (notif[0] !== 0xf2 && notif.length > 1) {
+                    window.dispatchEvent(new HeightEvent([notif[17], notif[19]]));
+                    lastHeightValues = [notif[17], notif[19]];
+                    this.dataOutCharacteristic.removeEventListener('characteristicvaluechanged', queryListener);
+                    resolve([notif[17], notif[19]]);
+                }
+            };
+            this.dataInCharacteristic.writeValue(deskQueryPacket);
+        })
     }
 
     onConnected() {
@@ -155,7 +189,7 @@ class Desk {
             const notif = toArray(event.target.value);
             // TODO: delay in sending/receiving commands. work in some dynamic lag time?
             // looks like my connection overshoots by ~20 so we hardcode that in [[heightNotificaitonDifference]] for now
-            if (notif[5] <= sittingHeightValues[0] - heigthNotificationDifference && notif[7] <= sittingHeightValues[1] - heigthNotificationDifference) {
+            if (notif[5] <= sittingHeightValues[0] + heightNotificationDifference && notif[7] <= sittingHeightValues[1] + heightNotificationDifference) {
                 clearInterval(interval);
                 this.dataOutCharacteristic.removeEventListener('characteristicvaluechanged', waitForValue);
             }
@@ -280,7 +314,8 @@ function toHexOrUTF8(d) {
     window.addEventListener('heightchanged', (event) => {
         console.info(`height event: ${JSON.stringify(event.detail)}`);
         document.querySelector('#sLastHeight').innerText = event.detail.height.toString();
-        document.querySelectorAll('#controlContainer button[id*="Set"').disabled = false;
+        lastHeightValues = event.detail.height;
+        document.querySelectorAll('#controlContainer button[id*=Set]').disabled = false;
     });
 
     // TODO: pull from localstorage to dispatch

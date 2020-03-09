@@ -5,12 +5,72 @@ const dataOutCharacteristicUUID = '0000ff02-0000-1000-8000-00805f9b34fb';
 const directionPacketDelay = 300; //ms
 const deskUpPacket = new Uint8Array([0xf1, 0xf1, 0x01, 0x00, 0x01, 0x7e]);
 const deskDownPacket = new Uint8Array([0xf1, 0xf1, 0x02, 0x00, 0x02, 0x7e]);
+const heightNotificationDifference = 20; 
+
+// TODO: how to get height out of the notifications?
+let standingHeightValues = [200, 212];
+let sittingHeightValues = [40, 52]; 
+let lastHeightValues;
+let automaticallyReconnnect = false;
+
 
 let desk;
 
+/**
+ * ConnectionEvent is fired when the current BLE connection changes
+ */
 class ConnectionEvent extends CustomEvent {
+    /**
+     * 
+     * @param {*} connected 
+     */
     constructor(connected) {
         super('connectionchanged', {detail: {connected}});
+    }
+}
+
+class HeightEvent extends CustomEvent {
+    /**
+     * Create a new HeightEvent
+     * @param {[number, number]} height last received height notification's bytes at 5 and 7
+     */
+    constructor(height) {
+        super('heightchanged', {detail: {height}})
+    }
+}
+
+class OptionsEvent extends CustomEvent {
+    /**
+     * 
+     * @param {[number, number]} standingHeight User-specified "standing" height 
+     * @param {[number, number]} sittingHeight User-specified "sitting" height
+     * @param {boolean} reconnect If app should automatically reconnect if BLE disconnects without user intention
+     */
+    constructor(standingHeight, sittingHeight, reconnect) {
+        super('optionschanged', {detail: {standingHeight, sittingHeight, reconnect}});
+    }
+
+    /**
+     * Create an OptionsEvent passing only the new standing height
+     */
+    static standingHeightChanged(height) {
+        return new OptionsEvent(height, sittingHeightValues, automaticallyReconnect);
+    }
+
+    /**
+     * Create an OptionsEvent passing only the new sitting height
+     * @param {[number, number]} height New sitting height
+     */
+    static sittingHeightChanged(height) {
+        return new OptionsEvent(standingHeightValues, height, automaticallyReconnnect);
+    }
+
+    /**
+     * Create an OptionsEvent passing only the new reconnect flag
+     * @param {boolean} reconnect 
+     */
+    static reconnectChanged(reconnect) {
+        return new OptionsEvent(standingHeightValues, sittingHeightValues, reconnect);
     }
 }
 
@@ -58,10 +118,13 @@ class Desk {
         window.dispatchEvent(new ConnectionEvent(false));
     }
 
+    // TODO: how can we tell notifications apart?
     onNotification(event) {
         console.info(`received notification: ${toHexString(event.target.value)}`);
         const notif = toArray(event.target.value);
-        console.info(`567: ${notif.slice(5, 8)}, 5: ${notif[5]}, 7: ${notif[7]}`);
+        const values = [notif[5], notif[7]];
+        window.dispatchEvent(new HeightEvent(values));
+        lastHeightValues = values;
     }
 
     up() {
@@ -70,6 +133,34 @@ class Desk {
 
     down() {
         this.dataInCharacteristic.writeValue(deskDownPacket.buffer);
+    }
+
+    async stand() {
+        const interval = setInterval(() => this.up(), directionPacketDelay);
+        const waitForValue = (event) => {
+            const notif = toArray(event.target.value);
+            // TODO: delay in sending/receiving commands. work in some dynamic lag time?
+            // looks like my connection overshoots by ~20 so we hardcode that in [[heightNotificaitonDifference]] for now
+            if (notif[5] >= standingHeightValues[0] - heightNotificationDifference && notif[7] >= standingHeightValues[1] - heightNotificationDifference) {
+                clearInterval(interval);
+                this.dataOutCharacteristic.removeEventListener('characteristicvaluechanged', waitForValue);
+            }
+        }
+        this.dataOutCharacteristic.addEventListener('characteristicvaluechanged', waitForValue);
+    }
+
+    async sit() {
+        const interval = setInterval(() => this.down(), directionPacketDelay);
+        const waitForValue = (event) => {
+            const notif = toArray(event.target.value);
+            // TODO: delay in sending/receiving commands. work in some dynamic lag time?
+            // looks like my connection overshoots by ~20 so we hardcode that in [[heightNotificaitonDifference]] for now
+            if (notif[5] <= sittingHeightValues[0] - heigthNotificationDifference && notif[7] <= sittingHeightValues[1] - heigthNotificationDifference) {
+                clearInterval(interval);
+                this.dataOutCharacteristic.removeEventListener('characteristicvaluechanged', waitForValue);
+            }
+        }
+        this.dataOutCharacteristic.addEventListener('characteristicvaluechanged', waitForValue);
     }
 }
 
@@ -165,14 +256,35 @@ function toHexOrUTF8(d) {
     document.querySelector('#btnDisconnect').addEventListener('click', onDisconnectClick);
     document.querySelector('#btnUp').addEventListener('mousedown', onUpMouseDown);
     document.querySelector('#btnDown').addEventListener('mousedown', onDownMouseDown);
-
-    window.addEventListener('connectionchanged', () => {
+    document.querySelector('#btnStand').addEventListener('click', onStandClick);
+    document.querySelector('#btnSit').addEventListener('click', onSitClick);
+    document.querySelector('#chxReconnect').addEventListener('change', onReconnectChanged); 
+    document.querySelector('#btnSetStand').addEventListener('click', onSetStandClick);
+    document.querySelector('#btnSetSit').addEventListener('click', onSetSitClick);
+    
+    window.addEventListener('connectionchanged', (event) => {
         console.info(`connection event: ${JSON.stringify(event.detail)}`);
         document.querySelector('#btnConnect').disabled = event.detail.connected;
-        for (const id of ['#btnDisconnect', '#btnUp', '#btnDown']) {
-            document.querySelector(id).disabled = !event.detail.connected;
-        }
+        document.querySelectorAll('#controlContainer button:not(#btnConnect):not([id*="Set"])').forEach((elem) => {
+            elem.disabled = !event.detail.connected;
+        });
     });
+
+    window.addEventListener('optionschanged', (event) => {
+        console.info(`options event: ${JSON.stringify(event.detail)}`);
+        document.querySelector('#sStandingHeight').innerText = event.detail.standingHeight.toString();
+        document.querySelector('#sSittingHeight').innerText = event.detail.sittingHeight.toString();
+        document.querySelector('#chxReconnect').checked = event.detail.reconnect;
+    });
+
+    window.addEventListener('heightchanged', (event) => {
+        console.info(`height event: ${JSON.stringify(event.detail)}`);
+        document.querySelector('#sLastHeight').innerText = event.detail.height.toString();
+        document.querySelectorAll('#controlContainer button[id*="Set"').disabled = false;
+    });
+
+    // TODO: pull from localstorage to dispatch
+    window.dispatchEvent(new OptionsEvent(standingHeightValues, sittingHeightValues, automaticallyReconnnect));
 })();
 
 async function onDiscoverButtonClick() {
@@ -214,6 +326,10 @@ async function onDiscoverButtonClick() {
     }
 }
 
+function onReconnectChanged() {
+    console.info('reconnect doesnt do anything yet lol');
+}
+
 async function onConnectClick() {
     try {
         await connect();
@@ -248,4 +364,30 @@ async function onDownMouseDown() {
         button.removeEventListener('mouseup', onMouseUp);
     }
     button.addEventListener('mouseup', onMouseUp);
+}
+
+function onStandClick() {
+    console.info('moving desk to standing height');
+    desk.stand();
+}
+
+function onSitClick() {
+    console.info('moving desk to sitting height');
+    desk.sit();
+}
+
+function onSetStandClick() {
+    if (!lastHeightValues) {
+        console.error('we havent received height values yet, cant set standing height')
+        return;
+    }
+    standingHeightValues = lastHeightValues;
+}
+
+function onSetSitClick() {
+    if (!lastHeightValues) {
+        console.error('we havent received hight values yet, cant set sitting height');
+        return;
+    }
+    sittingHeightValues = lastHeightValues;
 }

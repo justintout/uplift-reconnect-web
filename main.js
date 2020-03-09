@@ -13,7 +13,10 @@ let standingHeightValues = [200, 212];
 let sittingHeightValues = [41, 60]; 
 let lastHeightValues;
 let automaticallyReconnnect = false;
-
+let logNotifications = false;
+let logConnectionEvents = true;
+let logHeightEvents = false;
+let logOptionsEvents = true;
 
 let desk;
 
@@ -23,7 +26,7 @@ let desk;
 class ConnectionEvent extends CustomEvent {
     /**
      * 
-     * @param {*} connected 
+     * @param {boolean} connected 
      */
     constructor(connected) {
         super('connectionchanged', {detail: {connected}});
@@ -154,7 +157,9 @@ class Desk {
 
     // TODO: how can we tell notifications apart?
     onNotification(event) {
-        console.info(`received notification: ${toHexString(event.target.value)}`);
+        if (logNotifications) {
+            console.info(`received notification: ${toHexString(event.target.value)}`);
+        }
         const notif = toArray(event.target.value);
         const values = [notif[5], notif[7]];
         window.dispatchEvent(new HeightEvent(values));
@@ -285,7 +290,18 @@ function toHexOrUTF8(d) {
 }
 
 (function() {
+    const debug = [
+        {elem: document.querySelector('#chxLogConn'), listener: onLogConnectionEventsChanged, enabled: logConnectionEvents},
+        {elem: document.querySelector('#chxLogHeight'), listener: onLogHeightEventsChanged, enabled: logHeightEvents},
+        {elem: document.querySelector('#chxLogOpt'), listener: onLogOptionsEventsChanged, enabled: logOptionsEvents},
+        {elem: document.querySelector('#chxLogNotif'), listener: onLogNotificationsChanged, enabled: logNotifications}
+    ];
+    for (const d of debug) {
+        d.elem.checked = d.enabled;
+        d.elem.addEventListener('change', d.listener);
+    }
     document.querySelector('#btnServiceDiscovery').addEventListener('click', onDiscoverButtonClick);
+
     document.querySelector('#btnConnect').addEventListener('click', onConnectClick);
     document.querySelector('#btnDisconnect').addEventListener('click', onDisconnectClick);
     document.querySelector('#btnUp').addEventListener('mousedown', onUpMouseDown);
@@ -297,7 +313,7 @@ function toHexOrUTF8(d) {
     document.querySelector('#btnSetSit').addEventListener('click', onSetSitClick);
     
     window.addEventListener('connectionchanged', (event) => {
-        console.info(`connection event: ${JSON.stringify(event.detail)}`);
+        if (logConnectionEvents) console.info(`connection event: ${JSON.stringify(event.detail)}`);
         document.querySelector('#btnConnect').disabled = event.detail.connected;
         document.querySelectorAll('#controlContainer button:not(#btnConnect):not([id*="Set"])').forEach((elem) => {
             elem.disabled = !event.detail.connected;
@@ -305,17 +321,17 @@ function toHexOrUTF8(d) {
     });
 
     window.addEventListener('optionschanged', (event) => {
-        console.info(`options event: ${JSON.stringify(event.detail)}`);
+        if (logOptionsEvents) console.info(`options event: ${JSON.stringify(event.detail)}`);
         document.querySelector('#sStandingHeight').innerText = event.detail.standingHeight.toString();
         document.querySelector('#sSittingHeight').innerText = event.detail.sittingHeight.toString();
         document.querySelector('#chxReconnect').checked = event.detail.reconnect;
     });
 
     window.addEventListener('heightchanged', (event) => {
-        console.info(`height event: ${JSON.stringify(event.detail)}`);
+        if (logHeightEvents) console.info(`height event: ${JSON.stringify(event.detail)}`);
         document.querySelector('#sLastHeight').innerText = event.detail.height.toString();
         lastHeightValues = event.detail.height;
-        document.querySelectorAll('#controlContainer button[id*=Set]').disabled = false;
+        document.querySelectorAll('#controlContainer button[id*=Set]').forEach(elem => elem.disabled = false);
     });
 
     // TODO: pull from localstorage to dispatch
@@ -363,6 +379,23 @@ async function onDiscoverButtonClick() {
 
 function onReconnectChanged() {
     console.info('reconnect doesnt do anything yet lol');
+}
+
+function onLogConnectionEventsChanged(event) {
+    console.info(`Logging connection events: ${event.target.checked}`);
+    logConnectionEvents = event.target.checked;
+}
+function onLogHeightEventsChanged(event) {
+    console.info(`Logging height events: ${event.target.checked}`);
+    logHeightEvents = event.target.checked;
+}
+function onLogOptionsEventsChanged(event) {
+    console.info(`Logging options events: ${event.target.checked}`);
+    logOptionsEvents = event.target.checked;
+}
+function onLogNotificationsChanged(event) {
+    console.info(`Logging notifications: ${event.target.checked}`);
+    logNotifications = event.target.checked;
 }
 
 async function onConnectClick() {

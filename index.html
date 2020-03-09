@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Uplift Desk reConnect</title>
+
+    <link rel="stylesheet" href="main.css" />
 </head>
 <body>
     <h1>Uplift Desk reConnect</h1>
@@ -16,15 +18,15 @@
         <p>Last height: [<span id="sLastHeight">?,?</span>]</p>
         <p>Standing height: [<span id="sStandingHeight">?,?</span>]</p>
         <p>Sitting height: [<span id="sSittingHeight">?, ?</span>]</p>
-        <button id="btnConnect">Connect</button>
-        <button id="btnDisconnect" disabled>Disconnect</button>
-        <button id="btnUp" disabled>Up</button>
-        <button id="btnDown" disabled>Down</button>
-        <button id="btnStand" disabled>Stand</button>
-        <button id="btnSit" disabled>Sit</button>
+        <button class="noselect" id="btnConnect">Connect</button>
+        <button class="noselect" id="btnDisconnect" disabled>Disconnect</button>
+        <button class="noselect" id="btnUp" disabled>Up</button>
+        <button class="noselect" id="btnDown" disabled>Down</button>
+        <button class="noselect" id="btnStand" disabled>Stand</button>
+        <button class="noselect" id="btnSit" disabled>Sit</button>
         <label for="chxReconnect">Reconnect</label> <input type="checkbox" name="chxReconnect" id="chxReconnect" />
-        <button id="btnSetStand" disabled>Set Stand Height</button>
-        <button id="btnSetSit" disabled>Set Sit Height</button>
+        <button class="noselect" id="btnSetStand" disabled>Set Stand Height</button>
+        <button class="noselect" id="btnSetSit" disabled>Set Sit Height</button>
     </div>
     <!--
     eventually i'll need to do user signups and create an oauth provider so i can 

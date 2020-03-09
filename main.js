@@ -1,12 +1,18 @@
 const serviceUUID = '0000ff12-0000-1000-8000-00805f9b34fb';
-const dataInCharacteristicUUID = '0000ff01-0000-1000-8000-008005f9b34fb';
-const dataOutCharacteristicUUID = '0000ff02-0000-1000-8000-008005f9b34fb';
+const dataInCharacteristicUUID = '0000ff01-0000-1000-8000-00805f9b34fb';
+const dataOutCharacteristicUUID = '0000ff02-0000-1000-8000-00805f9b34fb';
 
-const directionPacketDelay = 3000; //ms
+const directionPacketDelay = 300; //ms
 const deskUpPacket = new Uint8Array([0xf1, 0xf1, 0x01, 0x00, 0x01, 0x7e]);
 const deskDownPacket = new Uint8Array([0xf1, 0xf1, 0x02, 0x00, 0x02, 0x7e]);
 
 let desk;
+
+class ConnectionEvent extends CustomEvent {
+    constructor(connected) {
+        super('connectionchanged', {detail: {connected}});
+    }
+}
 
 class Desk {
     
@@ -15,10 +21,47 @@ class Desk {
     }
     
     async connect() {
+        this.device.addEventListener('gattserverdisconnected', this.onDisconnected);
         this.server = await this.device.gatt.connect(); 
-        this.service = device.getService(serviceUUID);
-        this.dataInCharacteristic = this.service.getCharacteristic(dataInCharacteristicUUID);
-        this.dataOutCharacteristic = this.service.getCharacteristic(dataOutcharacteristicUUID);
+        this.service = (await this.server.getPrimaryServices(serviceUUID))[0];
+        this.dataInCharacteristic = await this.service.getCharacteristic(dataInCharacteristicUUID);
+        this.dataOutCharacteristic = await this.service.getCharacteristic(dataOutCharacteristicUUID);
+        window.dispatchEvent(new ConnectionEvent(true));
+        await this.startNotifications();
+    }
+
+    async disconnect() {
+        await this.stopNotifications();
+        this.server.disconnect();
+        this.server = undefined;
+        this.dataInCharacteristic = undefined;
+        this.dataOutCharacteristic = undefined;
+    }
+
+    async startNotifications() {
+        this.dataOutCharacteristic.addEventListener('characteristicvaluechanged', this.onNotification);
+        await this.dataOutCharacteristic.startNotifications();
+    }
+
+    async stopNotifications() {
+        this.dataOutCharacteristic.removeEventListener('characteristicvaluechanged', this.onNotification);
+        await this.dataOutCharacteristic.stopNotifications();
+    }
+
+    onConnected() {
+        console.info(`device connected`);
+        window.dispatchEvent(new ConnectionEvent(true));
+    }
+
+    onDisconnected() {
+        console.info(`device disconnected`);
+        window.dispatchEvent(new ConnectionEvent(false));
+    }
+
+    onNotification(event) {
+        console.info(`received notification: ${toHexString(event.target.value)}`);
+        const notif = toArray(event.target.value);
+        console.info(`567: ${notif.slice(5, 8)}, 5: ${notif[5]}, 7: ${notif[7]}`);
     }
 
     up() {
@@ -30,13 +73,19 @@ class Desk {
     }
 }
 
+async function getDevice() {
+    const device = await navigator.bluetooth.requestDevice({
+        filters: [
+            {services: [serviceUUID]},
+        ],
+        optionalServices: ['generic_access', 'generic_attribute', 'device_information']
+    });
+    return device;
+}
+
 async function connect() {
     try {
-        const device = await navigator.bluetooth.requestDevice({
-            filters: [
-                {services: [service]}
-            ]
-        });
+        const device = await getDevice();
         desk = new Desk(device);
         return await desk.connect();
     } catch (e) {
@@ -45,7 +94,7 @@ async function connect() {
 } 
 
 async function disconnect() {
-    if (desk) {
+    if (desk && desk.device.gatt.connected) {
         desk.disconnect(); 
     }
     desk = undefined;
@@ -113,21 +162,22 @@ function toHexOrUTF8(d) {
 (function() {
     document.querySelector('#btnServiceDiscovery').addEventListener('click', onDiscoverButtonClick);
     document.querySelector('#btnConnect').addEventListener('click', onConnectClick);
-    document.querySelector('#btnDisconnect').addEventListener('click', onConnectClick);
+    document.querySelector('#btnDisconnect').addEventListener('click', onDisconnectClick);
     document.querySelector('#btnUp').addEventListener('mousedown', onUpMouseDown);
     document.querySelector('#btnDown').addEventListener('mousedown', onDownMouseDown);
+
+    window.addEventListener('connectionchanged', () => {
+        console.info(`connection event: ${JSON.stringify(event.detail)}`);
+        document.querySelector('#btnConnect').disabled = event.detail.connected;
+        for (const id of ['#btnDisconnect', '#btnUp', '#btnDown']) {
+            document.querySelector(id).disabled = !event.detail.connected;
+        }
+    });
 })();
 
-
 async function onDiscoverButtonClick() {
-    alert('Check the console for info');
-
     try {
-        const device = await navigator.bluetooth.requestDevice({
-            filters: [
-                {services: [serviceUUID]}
-            ]
-        });
+        const device = await getDevice();
         const server = await device.gatt.connect();
         const services = await server.getPrimaryServices();
         for (const service of services) {
@@ -166,22 +216,14 @@ async function onDiscoverButtonClick() {
 
 async function onConnectClick() {
     try {
-        document.querySelector('#btnConnect').disabled = true;
         await connect();
-        for (const id of ['#btnDisconnect', '#btnUp', '#btnDown']) {
-            document.querySelector(id).disabled = false;
-        }
     } catch (e) {
-        document.querySelector('#btnConnect').disabled = false;
-        for (const id of ['#btnDisconnect', '#btnUp', '#btnDown']) {
-            document.querySelector(id).disabled = true;
-        }
         console.error(`couldn't connect to device: ${e}`);
     }
 }
 
 async function onDisconnectClick() {
-    await discnonect();
+    await disconnect();
 }
 
 async function onUpMouseDown() {
@@ -191,7 +233,7 @@ async function onUpMouseDown() {
     }, directionPacketDelay);
     const onMouseUp = function() {
         clearInterval(interval);
-        button.removeEventListener(onMouseUp);
+        button.removeEventListener('mouseup', onMouseUp);
     };
     button.addEventListener('mouseup', onMouseUp);
 }
@@ -203,7 +245,7 @@ async function onDownMouseDown() {
     }, directionPacketDelay);
     const onMouseUp = function() {
         clearInterval(interval);
-        button.removeEventListener(onMouseUp);
+        button.removeEventListener('mouseup', onMouseUp);
     }
     button.addEventListener('mouseup', onMouseUp);
 }

@@ -106,7 +106,7 @@ class Desk {
         this.name = await this.getName();
         window.dispatchEvent(new ConnectionEvent(true));
         await this.startNotifications();
-        this.queryInitialHeight();
+        this.queryHeight();
     }
 
     async disconnect() {
@@ -129,30 +129,10 @@ class Desk {
     }
 
     /**
-     * TODO: better query here? 
      * @async
      */
-    queryInitialHeight() {
-        return new Promise((resolve, reject) => {
-            // we'll time this out just incase 
-            setTimeout(() => reject('initial height query timed out'), 2000);
-            const queryListener = function(event) {
-                // TODO: how does this actually work?
-                //       some kinda handshake seems to happen before this. don't get 
-                //       notifs with just this packet
-                // we'll get 3 notifications back, looking for the second (doesnt lead with f2 and is longer than 1)
-                // then we can grab current height from 17 and 19
-                const notif = toArray(event.target.value);
-                console.info(`received initial notification: ${toHexString(event.target.value)}`);
-                if (notif[0] !== 0xf2 && notif.length > 1) {
-                    window.dispatchEvent(new HeightEvent([notif[17], notif[19]]));
-                    lastHeightValues = [notif[17], notif[19]];
-                    this.dataOutCharacteristic.removeEventListener('characteristicvaluechanged', queryListener);
-                    resolve([notif[17], notif[19]]);
-                }
-            };
-            this.dataInCharacteristic.writeValue(deskQueryPacket);
-        });
+    queryHeight() {
+        this.dataInCharacteristic.writeValue(deskQueryPacket);
     }
 
     onConnected() {
@@ -171,7 +151,8 @@ class Desk {
             console.info(`received notification: ${toHexString(event.target.value)}`);
         }
         const notif = toArray(event.target.value);
-        const values = [notif[5], notif[7]];
+        if (notif.length < 8) return;
+        const values = notif[0] === 241 ? [notif[5], notif[7]] : [notif[17], notif[19]];
         window.dispatchEvent(new HeightEvent(values));
         lastHeightValues = values;
     }

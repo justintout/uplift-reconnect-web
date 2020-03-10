@@ -1,6 +1,7 @@
 const serviceUUID = '0000ff12-0000-1000-8000-00805f9b34fb';
 const dataInCharacteristicUUID = '0000ff01-0000-1000-8000-00805f9b34fb';
 const dataOutCharacteristicUUID = '0000ff02-0000-1000-8000-00805f9b34fb';
+const nameCharacteristicUUID = '0000ff06-0000-1000-8000-00805f9b34fb';
 
 const directionPacketDelay = 300; //ms
 const deskQueryPacket = new Uint8Array([0xf1, 0xf1, 0x07, 0x00, 0x07, 0x7e]); // TODO: is this right? the app sends this at the beginning of connection so maybe?
@@ -11,12 +12,13 @@ const heightNotificationDifference = 20;
 // TODO: how to get height out of the notifications?
 let standingHeightValues = [200, 212];
 let sittingHeightValues = [41, 60]; 
-let lastHeightValues;
+let lastHeightValues = [NaN, NaN];
 let automaticallyReconnect = false;
 let logNotifications = false;
 let logConnectionEvents = true;
 let logHeightEvents = false;
 let logOptionsEvents = true;
+let logNameEvents = true;
 
 let desk;
 
@@ -40,6 +42,16 @@ class HeightEvent extends CustomEvent {
      */
     constructor(height) {
         super('heightchanged', {detail: {height}})
+    }
+}
+
+class NameEvent extends CustomEvent {
+    /**
+     * Create a new NameEvent
+     * @param {string} name
+     */
+    constructor(name) {
+        super('namechanged', {detail: {name}});
     }
 }
 
@@ -90,8 +102,11 @@ class Desk {
         this.service = (await this.server.getPrimaryServices(serviceUUID))[0];
         this.dataInCharacteristic = await this.service.getCharacteristic(dataInCharacteristicUUID);
         this.dataOutCharacteristic = await this.service.getCharacteristic(dataOutCharacteristicUUID);
+        this.nameCharacteristic = await this.service.getCharacteristic(nameCharacteristicUUID);
+        this.name = await this.getName();
         window.dispatchEvent(new ConnectionEvent(true));
         await this.startNotifications();
+        this.queryInitialHeight();
     }
 
     async disconnect() {
@@ -103,11 +118,6 @@ class Desk {
     }
 
     async startNotifications() {
-        try {
-            await this.queryInitialHeight();
-        } catch (e) {
-            console.error(`failed querying initial height`);
-        }
         // once we get our initial notifications (or not lol) we can listen for the height values 
         this.dataOutCharacteristic.addEventListener('characteristicvaluechanged', this.onNotification);
         await this.dataOutCharacteristic.startNotifications();
@@ -125,7 +135,7 @@ class Desk {
     queryInitialHeight() {
         return new Promise((resolve, reject) => {
             // we'll time this out just incase 
-            setTimeout(() => reject('never received our query values'), 5000);
+            setTimeout(() => reject('initial height query timed out'), 2000);
             const queryListener = function(event) {
                 // TODO: how does this actually work?
                 //       some kinda handshake seems to happen before this. don't get 
@@ -142,7 +152,7 @@ class Desk {
                 }
             };
             this.dataInCharacteristic.writeValue(deskQueryPacket);
-        })
+        });
     }
 
     onConnected() {
@@ -200,6 +210,21 @@ class Desk {
             }
         }
         this.dataOutCharacteristic.addEventListener('characteristicvaluechanged', waitForValue);
+    }
+
+    async getName() {
+        const decoder = new TextDecoder('utf-8');
+        const nameBytes = await this.nameCharacteristic.readValue();
+        const name = decoder.decode(nameBytes);
+        window.dispatchEvent(new NameEvent(name))
+        return name;
+    }
+
+    async setName(newName) {
+        const encoder = new TextEncoder();
+        const encodedName = encoder.encode(newName);
+        await this.nameCharacteristic.writeValue(encodedName.buffer);
+        this.name = newName;
     }
 }
 
@@ -289,8 +314,8 @@ function toHexOrUTF8(d) {
     return toHexString(d);
 }
 
-(function() {
-    if (!navigator.bluetooth) {
+function main(ignoreMissingBluetooth = false) {
+    if (!navigator.bluetooth && !ignoreMissingBluetooth) {
         document.querySelector('#browserWarningContainer').style.display = 'block';
         throw new Error(`navigator.bluetooth is undefined. can't continue`);
     }
@@ -298,7 +323,8 @@ function toHexOrUTF8(d) {
         {elem: document.querySelector('#chxLogConn'), listener: onLogConnectionEventsChanged, enabled: logConnectionEvents},
         {elem: document.querySelector('#chxLogHeight'), listener: onLogHeightEventsChanged, enabled: logHeightEvents},
         {elem: document.querySelector('#chxLogOpt'), listener: onLogOptionsEventsChanged, enabled: logOptionsEvents},
-        {elem: document.querySelector('#chxLogNotif'), listener: onLogNotificationsChanged, enabled: logNotifications}
+        {elem: document.querySelector('#chxLogNotif'), listener: onLogNotificationsChanged, enabled: logNotifications},
+        {elem: document.querySelector('#chxLogName'), listener: onLogNameEventsChanged, enabled: logNameEvents}
     ];
     for (const d of debug) {
         d.elem.checked = d.enabled;
@@ -306,6 +332,7 @@ function toHexOrUTF8(d) {
     }
     document.querySelector('#btnServiceDiscovery').addEventListener('click', onDiscoverButtonClick);
 
+    document.querySelector('#btnEditName').addEventListener('click', onEditNameClick);
     document.querySelector('#btnConnect').addEventListener('click', onConnectClick);
     document.querySelector('#btnDisconnect').addEventListener('click', onDisconnectClick);
     document.querySelector('#btnUp').addEventListener('mousedown', onUpMouseDown);
@@ -315,7 +342,7 @@ function toHexOrUTF8(d) {
     document.querySelector('#chxReconnect').addEventListener('change', onReconnectChanged); 
     document.querySelector('#btnSetStand').addEventListener('click', onSetStandClick);
     document.querySelector('#btnSetSit').addEventListener('click', onSetSitClick);
-    
+
     window.addEventListener('connectionchanged', (event) => {
         if (logConnectionEvents) console.info(`connection event: ${JSON.stringify(event.detail)}`);
         document.querySelector('#btnConnect').disabled = event.detail.connected;
@@ -338,9 +365,45 @@ function toHexOrUTF8(d) {
         document.querySelectorAll('#controlContainer button[id*=Set]').forEach(elem => elem.disabled = false);
     });
 
+    window.addEventListener('namechanged', (event) => {
+        if (logNameEvents) console.info(`name event: ${JSON.stringify(event.detail)}`);
+        document.querySelector('#sDeskName').innerText = event.detail.name;
+    });
+
     // TODO: pull from localstorage to dispatch
     window.dispatchEvent(new OptionsEvent(standingHeightValues, sittingHeightValues, automaticallyReconnect));
-})();
+}
+
+function onEditNameClick() {
+    this.innerText = '💾';
+    this.removeEventListener('click', onEditNameClick);
+    const inputElem = document.createElement('input');
+    const span = document.querySelector('#sDeskName');
+    inputElem.id = 'inNewName';
+    const onSaveName = () => {
+        const newName = document.querySelector('#inNewName').value;
+        try {
+            // save the desk
+            console.info(`setting desk name to "${newName}`);
+            desk.setName(newName)
+                .then(() => {
+                    span.innerText = newName;
+                });
+
+        } catch (e) {
+            console.error(`failed to set desk name: ${e}`);
+        } finally {
+            this.removeEventListener('click', onSaveName);
+            this.innerText = '✎';
+            this.addEventListener('click', onEditNameClick);
+            inputElem.remove();
+            span.style.display = 'inline';
+        }
+    }
+    this.addEventListener('click', onSaveName);
+    span.style.display = 'none';
+    document.querySelector('#pDeskName').insertBefore(inputElem, this);
+}
 
 async function onDiscoverButtonClick() {
     try {
@@ -402,8 +465,17 @@ function onLogNotificationsChanged(event) {
     logNotifications = event.target.checked;
 }
 
+function onLogNameEventsChanged(event) {
+    console.info(`Logging name events: ${event.target.checked}`);
+    logNameEvents = event.target.checked;
+}
+
 function revealDebug() {
     document.querySelector('#debugContainer').style.display = 'block';
+}
+
+function forceInitialization() {
+    main(true);
 }
 
 async function onConnectClick() {
@@ -469,3 +541,7 @@ function onSetSitClick() {
     sittingHeightValues = lastHeightValues;
     window.dispatchEvent(OptionsEvent.sittingHeightChanged(sittingHeightValues));
 }
+
+(function () {
+    main();
+})();

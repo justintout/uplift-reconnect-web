@@ -402,6 +402,10 @@ function onLogNotificationsChanged(event) {
     logNotifications = event.target.checked;
 }
 
+function revealDebug() {
+    document.querySelector('#debugContainer').style.display = 'block';
+}
+
 async function onConnectClick() {
     try {
         await connect();

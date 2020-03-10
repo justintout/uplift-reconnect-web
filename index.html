@@ -27,7 +27,7 @@
             You can find a full compatibility list <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API#Browser_compatibility">here</a>.
         </p>
     </div>
-    <div id="debugContainer">
+    <div id="debugContainer" style="display:none">
         <h2>Debug</h2>
         <button id="btnServiceDiscovery">Discover</button>
         <label for="chxLogConn">Log Connection Events</label> <input type="checkbox" name="chdLogConn" id="chxLogConn" />
@@ -38,6 +38,7 @@
     </div>
     <div id="controlContainer">
         <h2>Control</h2>
+        <p>Desk name: <span id="sName">?</span> <button id="bEditName">✎</button></p> 
         <p>Last height: [<span id="sLastHeight">?,?</span>]</p>
         <p>Standing height: [<span id="sStandingHeight">?,?</span>]</p>
         <p>Sitting height: [<span id="sSittingHeight">?, ?</span>]</p>
